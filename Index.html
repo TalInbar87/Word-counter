@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>מונה מילים קולי</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&family=Secular+One&display=swap">
+<style>
+/* Layout: one column, the count is the whole screen's anchor; controls below, log last */
+:root{
+  --bg:#eef1ef; --surface:#ffffff; --fg:#14201b; --muted:#5d6b65; --line:#d3dbd7;
+  --accent:#0f7a5c; --accent-fg:#ffffff; --live:#d9412b; --hit:#fff1b8;
+  --display:"Secular One","Assistant",system-ui,sans-serif;
+  --body:"Assistant",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0e1513; --surface:#17211e; --fg:#e7eeeb; --muted:#93a39c; --line:#2a3833;
+  --accent:#3fc79c; --accent-fg:#06241a; --live:#ff6a52; --hit:#5b4a10; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:17px;line-height:1.5;
+  padding-block:max(20px,env(safe-area-inset-top,0px)) max(28px,env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+h1{font-family:var(--display);font-weight:400;font-size:1.35rem;margin:0}
+.status{display:inline-flex;align-items:center;gap:8px;font-size:.9rem;color:var(--muted)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--line)}
+.listening .dot{background:var(--live);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.listening .dot{animation:none}}
+
+.field{display:flex;flex-direction:column;gap:6px}
+label{font-weight:600;font-size:.95rem}
+input[type=text],select{font:inherit;color:var(--fg);background:var(--surface);border:1.5px solid var(--line);
+  border-radius:10px;padding:12px 14px;width:100%}
+input[type=text]:focus,select:focus{outline:none;border-color:var(--accent)}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.row .field{flex:1 1 160px}
+.check{display:flex;align-items:center;gap:8px;font-size:.95rem;color:var(--muted)}
+.check input{width:18px;height:18px;accent-color:var(--accent)}
+
+.counter{background:var(--surface);border:1.5px solid var(--line);border-radius:18px;padding:22px 16px 18px;
+  display:flex;flex-direction:column;align-items:center;gap:6px}
+.target{color:var(--muted);font-size:.95rem}
+.target b{color:var(--fg)}
+.count{font-family:var(--display);font-size:clamp(5.5rem,30vw,9rem);line-height:1;
+  font-variant-numeric:tabular-nums;transition:transform .15s}
+.count.bump{transform:scale(1.12);color:var(--accent)}
+@media (prefers-reduced-motion:reduce){.count{transition:none}.count.bump{transform:none}}
+.adjust{display:flex;gap:10px}
+.adjust button{width:44px;height:44px;border-radius:50%;font-size:1.3rem}
+
+button{font:inherit;font-weight:700;cursor:pointer;border-radius:12px;border:1.5px solid var(--line);
+  background:var(--surface);color:var(--fg);padding:12px 18px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);flex:1;font-size:1.1rem;padding:16px}
+.listening .primary{background:var(--live);border-color:var(--live);color:#fff}
+.actions{display:flex;gap:10px}
+
+.transcript{min-height:3.2em;background:var(--surface);border:1.5px dashed var(--line);border-radius:12px;
+  padding:10px 14px;color:var(--muted);font-size:.98rem;overflow-wrap:anywhere}
+.transcript mark{background:var(--hit);color:var(--fg);border-radius:4px;padding:0 3px}
+.transcript .interim{opacity:.6}
+
+.log h2{font-size:1rem;margin:0 0 6px}
+.log ol{list-style:none;margin:0;padding:0;max-height:220px;overflow:auto;border-top:1px solid var(--line)}
+.log li{display:flex;justify-content:space-between;gap:12px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:.95rem}
+.log li span:first-child{font-variant-numeric:tabular-nums;color:var(--muted)}
+.log li span:last-child{min-width:0;overflow-wrap:anywhere}
+.empty{color:var(--muted);font-size:.9rem;padding:8px 2px}
+
+.warn{background:var(--hit);color:var(--fg);border-radius:12px;padding:12px 14px;font-size:.95rem}
+</style>
+</head>
+<body>
+<main id="app">
+  <header>
+    <h1>מונה מילים קולי</h1>
+    <span class="status"><span class="dot"></span><span id="statusText">כבוי</span></span>
+  </header>
+
+  <div id="unsupported" class="warn" hidden>הדפדפן הזה לא תומך בזיהוי דיבור. פתח את הדף ב-Chrome (מחשב או אנדרואיד) או ב-Edge.</div>
+  <div id="error" class="warn" hidden></div>
+
+  <div class="row">
+    <div class="field">
+      <label for="word">מילה לספירה</label>
+      <input id="word" type="text" value="בעצם" autocomplete="off">
+    </div>
+    <div class="field" style="flex:0 1 150px">
+      <label for="lang">שפה</label>
+      <select id="lang">
+        <option value="he-IL">עברית</option>
+        <option value="en-US">English</option>
+        <option value="ar-IL">العربية</option>
+        <option value="ru-RU">Русский</option>
+      </select>
+    </div>
+  </div>
+  <label class="check"><input id="prefixes" type="checkbox" checked> לספור גם עם תחיליות (ו, ה, ש, ב, ל, כ, מ)</label>
+
+  <section class="counter" aria-live="polite">
+    <div class="target">נספר: <b id="targetLabel">בעצם</b></div>
+    <div id="count" class="count">0</div>
+    <div class="adjust">
+      <button id="minus" aria-label="הורד אחד">−</button>
+      <button id="plus" aria-label="הוסף אחד">+</button>
+    </div>
+  </section>
+
+  <div class="actions">
+    <button id="toggle" class="primary">התחל להקשיב</button>
+    <button id="reset">איפוס</button>
+  </div>
+
+  <div id="transcript" class="transcript">התמלול יופיע כאן כשתתחיל לדבר.</div>
+
+  <section class="log">
+    <h2>זיהויים</h2>
+    <ol id="log"></ol>
+    <div id="logEmpty" class="empty">עדיין לא זוהתה המילה.</div>
+  </section>
+</main>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const store = {
+    get(k,d){try{const v=localStorage.getItem('wc_'+k);return v===null?d:JSON.parse(v)}catch(e){return d}},
+    set(k,v){try{localStorage.setItem('wc_'+k,JSON.stringify(v))}catch(e){}}
+  };
+
+  let count = store.get('count',0);
+  let hits = store.get('hits',[]);
+  let listening = false, rec = null, wakeLock = null;
+
+  $('word').value = store.get('word',$('word').value);
+  $('lang').value = store.get('lang','he-IL');
+  $('prefixes').checked = store.get('prefixes',true);
+
+  const PREFIX_RE = /^[והשבלכמ]{1,3}$/;
+  // Strip niqqud, punctuation and geresh variants, lower-case
+  const norm = s => s.replace(/[֑-ׇ]/g,'').replace(/[׳״'"`]/g,'')
+                     .toLowerCase().replace(/[^\p{L}\p{N}\s]/gu,' ').replace(/\s+/g,' ').trim();
+
+  function matchToken(tok, target, allowPrefix){
+    if(tok===target) return true;
+    if(!allowPrefix || !tok.endsWith(target)) return false;
+    return PREFIX_RE.test(tok.slice(0, tok.length-target.length));
+  }
+  // Returns indices of tokens where the target phrase starts
+  function findHits(text){
+    const target = norm($('word').value).split(' ').filter(Boolean);
+    if(!target.length) return {tokens:[],starts:[],len:0};
+    const tokens = text.split(/\s+/).filter(Boolean);
+    const nt = tokens.map(norm);
+    const allow = $('prefixes').checked;
+    const starts = [];
+    for(let i=0;i+target.length<=nt.length;i++){
+      let ok = matchToken(nt[i],target[0],allow);
+      for(let j=1;ok&&j<target.length;j++) ok = nt[i+j]===target[j];
+      if(ok){starts.push(i); i+=target.length-1;}
+    }
+    return {tokens,starts,len:target.length};
+  }
+
+  const esc = s => s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  function highlight(text){
+    const {tokens,starts,len} = findHits(text);
+    if(!starts.length) return esc(text);
+    const marks = new Set(); starts.forEach(s=>{for(let k=0;k<len;k++) marks.add(s+k)});
+    return tokens.map((t,i)=>marks.has(i)?'<mark>'+esc(t)+'</mark>':esc(t)).join(' ');
+  }
+
+  function render(){
+    $('count').textContent = count;
+    $('targetLabel').textContent = $('word').value.trim() || '—';
+    $('log').innerHTML = hits.slice().reverse().map(h=>'<li><span>'+h.t+'</span><span>'+esc(h.ctx)+'</span></li>').join('');
+    $('logEmpty').hidden = hits.length>0;
+    store.set('count',count); store.set('hits',hits.slice(-200));
+  }
+  function bump(){
+    const el=$('count'); el.classList.add('bump'); setTimeout(()=>el.classList.remove('bump'),160);
+    if(navigator.vibrate) try{navigator.vibrate(40)}catch(e){}
+  }
+  function setStatus(on,text){
+    document.getElementById('app').classList.toggle('listening',on);
+    $('statusText').textContent = text;
+    $('toggle').textContent = on ? 'עצור' : 'התחל להקשיב';
+  }
+  function showError(msg){ $('error').textContent=msg; $('error').hidden=!msg; }
+
+  async function keepAwake(on){
+    try{
+      if(on && 'wakeLock' in navigator){ wakeLock = await navigator.wakeLock.request('screen'); }
+      else if(!on && wakeLock){ await wakeLock.release(); wakeLock=null; }
+    }catch(e){}
+  }
+
+  function start(){
+    if(!SR) return;
+    if(!$('word').value.trim()){ showError('כתוב קודם מילה לספירה.'); return; }
+    showError('');
+    rec = new SR();
+    rec.lang = $('lang').value;
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.onresult = e => {
+      let finalText='', interim='';
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        const r=e.results[i];
+        if(r.isFinal){
+          const t=r[0].transcript; finalText+=t+' ';
+          const n=findHits(t).starts.length;
+          if(n>0){
+            count+=n;
+            const time=new Date().toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+            for(let k=0;k<n;k++) hits.push({t:time,ctx:t.trim()});
+            bump(); render();
+          }
+        } else interim+=r[0].transcript;
+      }
+      const shown = finalText ? highlight(finalText.trim()) : '';
+      $('transcript').innerHTML = shown + (interim?' <span class="interim">'+esc(interim)+'</span>':'') || 'מקשיב…';
+    };
+    rec.onerror = e => {
+      if(e.error==='not-allowed'||e.error==='service-not-allowed'){
+        listening=false; setStatus(false,'כבוי');
+        showError('אין גישה למיקרופון. אשר הרשאת מיקרופון לדף בהגדרות הדפדפן ונסה שוב.');
+      } else if(e.error==='network'){
+        showError('זיהוי הדיבור דורש חיבור לאינטרנט.');
+      }
+    };
+    // Chrome stops after silence; restart automatically while the user wants to listen
+    rec.onend = () => { if(listening){ try{rec.start()}catch(e){setTimeout(()=>listening&&rec.start(),300)} } };
+    try{ rec.start(); listening=true; setStatus(true,'מקשיב'); keepAwake(true);
+         $('transcript').textContent='מקשיב…'; }
+    catch(e){ showError('לא הצלחתי להפעיל את המיקרופון: '+e.message); }
+  }
+  function stop(){
+    listening=false; if(rec){ try{rec.stop()}catch(e){} }
+    setStatus(false,'כבוי'); keepAwake(false);
+  }
+
+  $('toggle').addEventListener('click',()=> listening?stop():start());
+  $('reset').addEventListener('click',()=>{ count=0; hits=[]; render(); $('transcript').textContent='המונה אופס.'; });
+  $('plus').addEventListener('click',()=>{ count++; bump(); render(); });
+  $('minus').addEventListener('click',()=>{ count=Math.max(0,count-1); render(); });
+  $('word').addEventListener('input',()=>{ store.set('word',$('word').value); render(); });
+  $('prefixes').addEventListener('change',()=>store.set('prefixes',$('prefixes').checked));
+  $('lang').addEventListener('change',()=>{ store.set('lang',$('lang').value); if(listening){stop();start();} });
+  document.addEventListener('visibilitychange',()=>{ if(listening&&document.visibilityState==='visible') keepAwake(true); });
+
+  if(!SR){ $('unsupported').hidden=false; $('toggle').disabled=true; }
+  render();
+})();
+</script>
+</body>
+</html>
